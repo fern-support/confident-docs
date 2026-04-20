@@ -378,13 +378,42 @@
   // Run on initial load
   injectAllSchemas();
 
-  // Re-run on SPA navigations by observing title changes
-  var titleEl = document.querySelector("title");
-  if (titleEl) {
-    var titleObserver = new MutationObserver(function () {
-      // Small delay to let meta tags update after navigation
-      setTimeout(injectAllSchemas, 100);
-    });
-    titleObserver.observe(titleEl, { childList: true, characterData: true, subtree: true });
+  // Re-run on SPA navigations using multiple detection strategies
+  var lastUrl = window.location.href;
+
+  function onNavigation() {
+    var currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
+      // Delay to let meta tags, title, and breadcrumbs update after navigation
+      setTimeout(injectAllSchemas, 300);
+    }
   }
+
+  // 1. Patch history.pushState and replaceState to detect programmatic navigation
+  var origPushState = history.pushState;
+  history.pushState = function () {
+    origPushState.apply(this, arguments);
+    onNavigation();
+  };
+  var origReplaceState = history.replaceState;
+  history.replaceState = function () {
+    origReplaceState.apply(this, arguments);
+    onNavigation();
+  };
+
+  // 2. Listen for popstate (browser back/forward)
+  window.addEventListener("popstate", function () {
+    onNavigation();
+  });
+
+  // 3. Observe <head> for child changes (catches title element replacement)
+  var headObserver = new MutationObserver(function () {
+    var currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
+      setTimeout(injectAllSchemas, 300);
+    }
+  });
+  headObserver.observe(document.head, { childList: true, subtree: true });
 })();
