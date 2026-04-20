@@ -250,3 +250,171 @@
   window.IMAGES = IMAGES;
   window.loadImages = loadImages;
 })();
+
+// Schema.org JSON-LD Structured Data Injection
+// Injects structured data for AI agents and search engines to improve discoverability and citations
+(function injectSchemaOrgJsonLd() {
+  if (typeof window === "undefined") return;
+
+  var ORG_NAME = "Confident AI";
+  var ORG_URL = "https://www.confident-ai.com";
+  var SITE_NAME = "Confident AI Docs";
+
+  function getMetaContent(name) {
+    var el =
+      document.querySelector('meta[name="' + name + '"]') ||
+      document.querySelector('meta[property="' + name + '"]');
+    return el ? el.getAttribute("content") : "";
+  }
+
+  function buildBreadcrumbSchema() {
+    // Fern docs uses span.fern-breadcrumb > a.fern-breadcrumb-item for breadcrumbs
+    var breadcrumbEls = document.querySelectorAll(
+      '.fern-breadcrumb-item'
+    );
+
+    if (breadcrumbEls.length === 0) return null;
+
+    var items = [];
+    for (var i = 0; i < breadcrumbEls.length; i++) {
+      var el = breadcrumbEls[i];
+      var name = (el.textContent || "").trim();
+      if (!name) continue;
+      items.push({
+        "@type": "ListItem",
+        position: items.length + 1,
+        name: name,
+        item: el.href,
+      });
+    }
+
+    // Add current page as the last breadcrumb item
+    var pageTitle = document.title.split("|")[0].trim();
+    if (pageTitle) {
+      items.push({
+        "@type": "ListItem",
+        position: items.length + 1,
+        name: pageTitle,
+        item: window.location.href.split("#")[0],
+      });
+    }
+
+    if (items.length === 0) return null;
+
+    return {
+      "@context": "https://schema.org",
+      "@type": "BreadcrumbList",
+      itemListElement: items,
+    };
+  }
+
+  function buildArticleSchema() {
+    var title = document.title.split("|")[0].trim();
+    var description = getMetaContent("description") || getMetaContent("og:description") || "";
+    var canonical =
+      (document.querySelector('link[rel="canonical"]') || {}).href ||
+      window.location.href.split("#")[0];
+
+    return {
+      "@context": "https://schema.org",
+      "@type": "TechArticle",
+      headline: title,
+      description: description,
+      url: canonical,
+      mainEntityOfPage: {
+        "@type": "WebPage",
+        "@id": canonical,
+      },
+      publisher: {
+        "@type": "Organization",
+        name: ORG_NAME,
+        url: ORG_URL,
+      },
+      isPartOf: {
+        "@type": "WebSite",
+        name: SITE_NAME,
+        url: "https://confident-ai.com/docs",
+      },
+    };
+  }
+
+  function buildWebSiteSchema() {
+    return {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: SITE_NAME,
+      url: "https://confident-ai.com/docs",
+      publisher: {
+        "@type": "Organization",
+        name: ORG_NAME,
+        url: ORG_URL,
+      },
+    };
+  }
+
+  function injectJsonLd(data) {
+    if (!data) return;
+    var script = document.createElement("script");
+    script.type = "application/ld+json";
+    script.setAttribute("data-schema-org", "true");
+    script.textContent = JSON.stringify(data);
+    document.head.appendChild(script);
+  }
+
+  function removeExistingJsonLd() {
+    var existing = document.querySelectorAll("script[data-schema-org]");
+    for (var i = 0; i < existing.length; i++) {
+      existing[i].remove();
+    }
+  }
+
+  function injectAllSchemas() {
+    removeExistingJsonLd();
+    injectJsonLd(buildWebSiteSchema());
+    injectJsonLd(buildArticleSchema());
+    injectJsonLd(buildBreadcrumbSchema());
+  }
+
+  // Run on initial load and ensure re-run after DOM is fully parsed
+  injectAllSchemas();
+  document.addEventListener("DOMContentLoaded", injectAllSchemas);
+
+  // Re-run on SPA navigations using multiple detection strategies
+  var lastUrl = window.location.href;
+
+  function onNavigation() {
+    var currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
+      // Delay to let meta tags, title, and breadcrumbs update after navigation
+      setTimeout(injectAllSchemas, 300);
+    }
+  }
+
+  // 1. Patch history.pushState and replaceState to detect programmatic navigation
+  var origPushState = history.pushState;
+  history.pushState = function () {
+    origPushState.apply(this, arguments);
+    onNavigation();
+  };
+  var origReplaceState = history.replaceState;
+  history.replaceState = function () {
+    origReplaceState.apply(this, arguments);
+    onNavigation();
+  };
+
+  // 2. Listen for popstate (browser back/forward)
+  window.addEventListener("popstate", function () {
+    onNavigation();
+  });
+
+  // 3. Observe <head> for child changes (catches title element replacement)
+  var headObserver = new MutationObserver(function () {
+    var currentUrl = window.location.href;
+    if (currentUrl !== lastUrl) {
+      lastUrl = currentUrl;
+      setTimeout(injectAllSchemas, 300);
+    }
+  });
+  headObserver.observe(document.head, { childList: true, subtree: true });
+})();
