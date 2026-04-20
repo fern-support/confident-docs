@@ -375,8 +375,9 @@
     injectJsonLd(buildBreadcrumbSchema());
   }
 
-  // Run on initial load
+  // Run on initial load and ensure re-run after DOM is fully parsed
   injectAllSchemas();
+  document.addEventListener("DOMContentLoaded", injectAllSchemas);
 
   // Re-run on SPA navigations using multiple detection strategies
   var lastUrl = window.location.href;
