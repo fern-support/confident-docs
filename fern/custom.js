@@ -250,3 +250,117 @@
   window.IMAGES = IMAGES;
   window.loadImages = loadImages;
 })();
+
+// UTM Propagation - capture UTM params from the URL and forward them to
+// outbound links pointing at allow-listed first-party domains so attribution
+// is preserved across deepeval.com, confident-ai.com, and confident-ai.com/docs.
+(function propagateUtmParams() {
+  if (typeof window === "undefined") return;
+
+  const ALLOWED_DOMAINS = ["confident-ai.com", "deepeval.com"];
+  const TRACKED_PARAMS = [
+    "utm_source",
+    "utm_medium",
+    "utm_campaign",
+    "utm_term",
+    "utm_content",
+    "gclid",
+    "fbclid",
+  ];
+  const STORAGE_KEY = "confident_tracked_utm_params";
+  const TTL_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+  function captureFromUrl() {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const captured = {};
+      TRACKED_PARAMS.forEach((key) => {
+        const value = params.get(key);
+        if (value) captured[key] = value;
+      });
+      if (Object.keys(captured).length > 0) {
+        localStorage.setItem(
+          STORAGE_KEY,
+          JSON.stringify({ ts: Date.now(), params: captured })
+        );
+      }
+    } catch (e) {
+      // localStorage may be unavailable (private mode, etc.) - silently ignore
+    }
+  }
+
+  function getStored() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return null;
+      const parsed = JSON.parse(raw);
+      if (!parsed || !parsed.params) return null;
+      if (Date.now() - parsed.ts > TTL_MS) {
+        localStorage.removeItem(STORAGE_KEY);
+        return null;
+      }
+      return parsed.params;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function isAllowedHost(hostname) {
+    return ALLOWED_DOMAINS.some(
+      (d) => hostname === d || hostname.endsWith("." + d)
+    );
+  }
+
+  function decorateLink(anchor, stored) {
+    if (!anchor || !anchor.href || anchor.dataset.utmDecorated === "1") return;
+    let url;
+    try {
+      url = new URL(anchor.href, window.location.href);
+    } catch (e) {
+      return;
+    }
+    if (url.protocol !== "https:" && url.protocol !== "http:") return;
+    if (!isAllowedHost(url.hostname)) return;
+    // Skip same-origin links so we don't pollute internal docs navigation
+    if (url.hostname === window.location.hostname) return;
+    Object.keys(stored).forEach((key) => {
+      if (!url.searchParams.has(key)) url.searchParams.set(key, stored[key]);
+    });
+    anchor.href = url.toString();
+    anchor.dataset.utmDecorated = "1";
+  }
+
+  function decorateAll() {
+    const stored = getStored();
+    if (!stored) return;
+    document
+      .querySelectorAll("a[href]")
+      .forEach((anchor) => decorateLink(anchor, stored));
+  }
+
+  function init() {
+    captureFromUrl();
+    decorateAll();
+
+    // Re-decorate as new links are rendered (SPA nav, lazy-loaded content)
+    const observer = new MutationObserver(() => decorateAll());
+    observer.observe(document.body, { childList: true, subtree: true });
+
+    // Catch SPA history navigation
+    ["pushState", "replaceState"].forEach((method) => {
+      const original = history[method];
+      history[method] = function () {
+        const result = original.apply(this, arguments);
+        decorateAll();
+        return result;
+      };
+    });
+    window.addEventListener("popstate", decorateAll);
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
+})();
