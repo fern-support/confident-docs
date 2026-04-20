@@ -258,7 +258,7 @@
 
   var ORG_NAME = "Confident AI";
   var ORG_URL = "https://www.confident-ai.com";
-  var SITE_NAME = "Confident AI Documentation";
+  var SITE_NAME = "Confident AI Docs";
 
   function getMetaContent(name) {
     var el =
@@ -268,9 +268,9 @@
   }
 
   function buildBreadcrumbSchema() {
-    // Look for breadcrumb elements in the Fern docs UI
+    // Fern docs uses span.fern-breadcrumb > a.fern-breadcrumb-item for breadcrumbs
     var breadcrumbEls = document.querySelectorAll(
-      '[class*="breadcrumb"] a, nav[aria-label="breadcrumb"] a, nav[aria-label="Breadcrumb"] a'
+      '.fern-breadcrumb-item'
     );
 
     if (breadcrumbEls.length === 0) return null;
@@ -333,7 +333,7 @@
       isPartOf: {
         "@type": "WebSite",
         name: SITE_NAME,
-        url: ORG_URL + "/docs",
+        url: "https://confident-ai.com/docs",
       },
     };
   }
@@ -343,7 +343,7 @@
       "@context": "https://schema.org",
       "@type": "WebSite",
       name: SITE_NAME,
-      url: ORG_URL + "/docs",
+      url: "https://confident-ai.com/docs",
       publisher: {
         "@type": "Organization",
         name: ORG_NAME,
